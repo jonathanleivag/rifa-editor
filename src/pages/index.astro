@@ -785,32 +785,29 @@ if (raffleIdStr) {
 
         <!-- Dynamic sales registrator -->
         <div class="form-group" style="background: rgba(255, 255, 255, 0.02); border: 1px dashed var(--border-color); border-radius: 8px; padding: 14px; margin-bottom: 15px;">
-          <label style="color: #fff; font-size: 11px; margin-bottom: 10px; display: block; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Venta de Números</label>
+          <label style="color: #fff; font-size: 11px; margin-bottom: 10px; display: block; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Registro de Ventas</label>
           <div style="margin-top: -4px; margin-bottom: 12px;">
-            <span id="sales-summary-text" style="font-size: 11px; color: var(--text-gray); font-weight: 500;">Vendidos: 0 de 10</span>
+            <span id="sales-summary-text" style="font-size: 11px; color: var(--text-gray); font-weight: 500;">Total Vendidos: 0 boletos</span>
           </div>
           <div class="form-row" style="margin-bottom: 8px; gap: 8px;">
-            <div style="display: flex; flex-direction: column; width: 35%;">
-              <label for="input-sale-number" style="font-size: 9px; margin-bottom: 4px;">Número</label>
-              <select id="input-sale-number" style="width: 100%; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; font-family: inherit; font-size: 12px; color: var(--text-light); cursor: pointer;">
-                <!-- Populated dynamically via JS -->
-              </select>
-            </div>
             <div style="display: flex; flex-direction: column; width: 65%;">
-              <label for="input-sale-name" style="font-size: 9px; margin-bottom: 4px;">Nombre Comprador</label>
-              <input type="text" id="input-sale-name" placeholder="Ej: Juan Pérez" style="width: 100%; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; font-family: inherit; font-size: 12px; color: var(--text-light);">
+              <label for="input-seller-name" style="font-size: 9px; margin-bottom: 4px;">Nombre del Vendedor</label>
+              <input type="text" id="input-seller-name" placeholder="Ej: Juan Pérez" style="width: 100%; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; font-family: inherit; font-size: 12px; color: var(--text-light);">
+            </div>
+            <div style="display: flex; flex-direction: column; width: 35%;">
+              <label for="input-seller-quantity" style="font-size: 9px; margin-bottom: 4px;">Boletos</label>
+              <input type="number" id="input-seller-quantity" min="1" value="1" style="width: 100%; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; font-family: inherit; font-size: 12px; color: var(--text-light);">
             </div>
           </div>
-          <div class="form-group" id="dynamic-sale-fields" style="margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;">
-            <!-- Rendered dynamically -->
-          </div>
-          <div class="form-row" style="margin-top: 6px; gap: 8px;">
-            <button type="button" class="btn-add-prize" id="btn-register-sale" style="margin-top: 0; background: var(--accent-color); color: #fff; font-size: 11px; padding: 8px 10px;">
+          <div class="form-row" style="margin-top: 6px; margin-bottom: 12px;">
+            <button type="button" class="btn-add-prize" id="btn-register-sale" style="margin-top: 0; background: var(--accent-color); color: #fff; font-size: 11px; padding: 8px 10px; width: 100%;">
               Registrar Venta
             </button>
-            <button type="button" class="btn-add-prize" id="btn-clear-sale" style="margin-top: 0; background: rgba(239, 68, 68, 0.1); color: var(--red); border-color: rgba(239, 68, 68, 0.2); font-size: 11px; padding: 8px 10px;">
-              Liberar Número
-            </button>
+          </div>
+          
+          <!-- Sales List Container -->
+          <div id="sales-list-container" style="display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto; padding-right: 4px;">
+            <!-- Rendered dynamically -->
           </div>
         </div>
 
@@ -1067,8 +1064,6 @@ if (raffleIdStr) {
       // Special Inputs
       elements.rows.addEventListener('input', () => {
         renderTableRows();
-        populateSalesNumbersDropdown();
-        updateSalesInputs();
       });
       
       // Styling controls
@@ -1131,19 +1126,9 @@ if (raffleIdStr) {
       });
 
       // Sales handlers
-      const salesNumberDropdown = document.getElementById('input-sale-number');
-      if (salesNumberDropdown) {
-        salesNumberDropdown.addEventListener('change', updateSalesInputs);
-      }
-      
       const btnRegisterSale = document.getElementById('btn-register-sale');
       if (btnRegisterSale) {
         btnRegisterSale.addEventListener('click', registerSale);
-      }
-      
-      const btnClearSale = document.getElementById('btn-clear-sale');
-      if (btnClearSale) {
-        btnClearSale.addEventListener('click', clearSale);
       }
 
       // Set initial values (load if came from db, otherwise use original)
@@ -1252,149 +1237,80 @@ if (raffleIdStr) {
       const summaryText = document.getElementById('sales-summary-text');
       if (!summaryText) return;
       
-      const totalRows = parseInt(elements.rows.value) || 10;
-      const soldCount = currentParticipants.length;
-      
-      summaryText.textContent = `Vendidos: ${soldCount} de ${totalRows}`;
+      const soldCount = currentParticipants.reduce((sum, p) => sum + (p.quantity || 0), 0);
+      summaryText.textContent = `Total Vendidos: ${soldCount} boletos`;
     }
 
-    // Populate select dropdown for sales numbers
-    function populateSalesNumbersDropdown() {
-      const rowCount = parseInt(elements.rows.value) || 10;
-      const select = document.getElementById('input-sale-number');
-      if (!select) return;
+    // Render registered sales list
+    function renderSalesList() {
+      const container = document.getElementById('sales-list-container');
+      if (!container) return;
+      container.innerHTML = '';
       
-      const currentSelected = select.value;
-      select.innerHTML = '';
-      
-      for (let i = 1; i <= rowCount; i++) {
-        const option = document.createElement('option');
-        option.value = i;
-        option.textContent = `#${i}`;
-        select.appendChild(option);
-      }
-      
-      if (currentSelected && parseInt(currentSelected) <= rowCount) {
-        select.value = currentSelected;
-      } else {
-        select.value = "1";
-      }
-      
-      updateSalesSummary();
-    }
-
-    // Update sales inputs dynamically based on selected number and currentColumns list
-    function updateSalesInputs() {
-      const select = document.getElementById('input-sale-number');
-      const nameInput = document.getElementById('input-sale-name');
-      const dynamicFields = document.getElementById('dynamic-sale-fields');
-      if (!select || !nameInput || !dynamicFields) return;
-      
-      const num = parseInt(select.value) || 1;
-      const participant = currentParticipants.find(p => p.rowNumber === num);
-      
-      // Clear inputs
-      nameInput.value = '';
-      dynamicFields.innerHTML = '';
-      
-      // Render other columns as inputs (excluding the first column, which is Name)
-      const otherColumns = currentColumns.slice(1);
-      
-      otherColumns.forEach((colName) => {
-        const fieldDiv = document.createElement('div');
-        fieldDiv.style.display = 'flex';
-        fieldDiv.style.flexDirection = 'column';
-        fieldDiv.style.gap = '4px';
+      currentParticipants.forEach((sale, index) => {
+        const div = document.createElement('div');
+        div.style.display = 'flex';
+        div.style.justifyContent = 'space-between';
+        div.style.alignItems = 'center';
+        div.style.background = 'rgba(255, 255, 255, 0.02)';
+        div.style.border = '1px solid var(--border-color)';
+        div.style.borderRadius = '6px';
+        div.style.padding = '8px 10px';
+        div.style.fontSize = '12px';
         
-        const label = document.createElement('label');
-        label.style.fontSize = '9px';
-        label.style.color = 'var(--text-gray)';
-        label.textContent = colName;
+        const info = document.createElement('span');
+        info.innerHTML = `<strong style="color:#fff;">${sale.sellerName}</strong>: ${sale.quantity} boleto(s)`;
         
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.className = 'dynamic-sale-input';
-        input.dataset.column = colName;
-        input.placeholder = `Ingresa ${colName.toLowerCase()}...`;
-        input.style.width = '100%';
-        input.style.background = 'rgba(255, 255, 255, 0.04)';
-        input.style.border = '1px solid var(--border-color)';
-        input.style.borderRadius = '6px';
-        input.style.padding = '8px 10px';
-        input.style.fontFamily = 'inherit';
-        input.style.fontSize = '12px';
-        input.style.color = 'var(--text-light)';
+        const btnDelete = document.createElement('button');
+        btnDelete.type = 'button';
+        btnDelete.style.background = 'none';
+        btnDelete.style.border = 'none';
+        btnDelete.style.color = '#ef4444';
+        btnDelete.style.cursor = 'pointer';
+        btnDelete.style.padding = '0';
+        btnDelete.style.display = 'flex';
+        btnDelete.style.alignItems = 'center';
+        btnDelete.innerHTML = '<svg class="icon" style="width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+        btnDelete.addEventListener('click', () => {
+          currentParticipants.splice(index, 1);
+          renderSalesList();
+          updateSalesSummary();
+        });
         
-        // Populate if exists
-        if (participant && participant.data) {
-          input.value = participant.data[colName] || '';
-        }
-        
-        fieldDiv.appendChild(label);
-        fieldDiv.appendChild(input);
-        dynamicFields.appendChild(fieldDiv);
+        div.appendChild(info);
+        div.appendChild(btnDelete);
+        container.appendChild(div);
       });
-      
-      // Populate name
-      if (participant && participant.data) {
-        nameInput.value = participant.data[currentColumns[0]] || '';
-      }
     }
 
-    // Register sale
+    // Register sale of raffle tickets
     function registerSale() {
-      const select = document.getElementById('input-sale-number');
-      const nameInput = document.getElementById('input-sale-name');
-      if (!select || !nameInput) return;
+      const nameInput = document.getElementById('input-seller-name');
+      const qtyInput = document.getElementById('input-seller-quantity');
+      if (!nameInput || !qtyInput) return;
       
-      const num = parseInt(select.value) || 1;
-      const name = nameInput.value.trim();
-      if (!name) {
-        alert('Por favor ingresa al menos el nombre del comprador');
+      const sellerName = nameInput.value.trim();
+      const quantity = parseInt(qtyInput.value) || 0;
+      
+      if (!sellerName) {
+        alert('Por favor ingresa el nombre del vendedor');
         return;
       }
       
-      const data = {};
-      data[currentColumns[0]] = name;
-      
-      // Gather dynamic inputs
-      const dynamicInputs = document.querySelectorAll('.dynamic-sale-input');
-      dynamicInputs.forEach((input) => {
-        const col = input.dataset.column;
-        data[col] = input.value.trim();
-      });
-      
-      // Update in array
-      const existingIndex = currentParticipants.findIndex(p => p.rowNumber === num);
-      if (existingIndex > -1) {
-        currentParticipants[existingIndex].data = data;
-      } else {
-        currentParticipants.push({ rowNumber: num, data });
+      if (quantity <= 0) {
+        alert('Por favor ingresa una cantidad válida de boletos vendidos');
+        return;
       }
       
-      // Re-render
-      populateSalesNumbersDropdown();
-      renderTableRows();
-      showToast('¡Venta registrada con éxito!');
-    }
-
-    // Release ticket
-    function clearSale() {
-      const select = document.getElementById('input-sale-number');
-      if (!select) return;
-      
-      const num = parseInt(select.value) || 1;
-      currentParticipants = currentParticipants.filter(p => p.rowNumber !== num);
+      currentParticipants.push({ sellerName, quantity });
       
       // Clear inputs
-      document.getElementById('input-sale-name').value = '';
-      const dynamicInputs = document.querySelectorAll('.dynamic-sale-input');
-      dynamicInputs.forEach(i => i.value = '');
+      nameInput.value = '';
+      qtyInput.value = '1';
       
-      // Re-render
-      populateSalesNumbersDropdown();
-      renderTableRows();
-      showToast('¡Número liberado!');
+      renderSalesList();
+      updateSalesSummary();
+      showToast('¡Venta registrada con éxito!');
     }
 
     // Toast notifications helper
@@ -1487,7 +1403,7 @@ if (raffleIdStr) {
       }
     }
 
-    // Render Table Rows dynamically based on currentColumns list and currentParticipants
+    // Render Table Rows dynamically based on currentColumns list
     function renderTableRows() {
       const rowCount = parseInt(elements.rows.value) || 10;
       elements.previewTableBody.innerHTML = '';
@@ -1501,9 +1417,6 @@ if (raffleIdStr) {
         tdNo.textContent = `${i}.`;
         tr.appendChild(tdNo);
         
-        // Find registered participant
-        const participantObj = currentParticipants.find(p => p.rowNumber === i);
-        
         // Custom columns cells
         currentColumns.forEach((colName, colIndex) => {
           const td = document.createElement('td');
@@ -1511,29 +1424,15 @@ if (raffleIdStr) {
             td.className = 'td-phone'; // resets padding-right for last cell
           }
           
-          if (participantObj && participantObj.data && participantObj.data[colName]) {
-            // Render buyer information
-            const infoSpan = document.createElement('span');
-            infoSpan.textContent = participantObj.data[colName].toUpperCase();
-            infoSpan.style.fontWeight = '700';
-            infoSpan.style.fontSize = 'calc(10.5px * var(--font-scale))';
-            infoSpan.style.color = 'var(--text-dark)';
-            infoSpan.style.textShadow = '0 0 3px #faf7f2';
-            infoSpan.style.letterSpacing = '0.5px';
-            td.appendChild(infoSpan);
-          } else {
-            // Render dotted line
-            const line = document.createElement('div');
-            line.className = 'dotted-line';
-            
-            // Reset right margin on the last column dotted line
-            if (colIndex === currentColumns.length - 1) {
-              line.style.marginRight = '0';
-            }
-            
-            td.appendChild(line);
+          const line = document.createElement('div');
+          line.className = 'dotted-line';
+          
+          // Reset right margin on the last column dotted line
+          if (colIndex === currentColumns.length - 1) {
+            line.style.marginRight = '0';
           }
           
+          td.appendChild(line);
           tr.appendChild(td);
         });
         
@@ -1692,8 +1591,8 @@ if (raffleIdStr) {
       renderPrizes();
       renderColumnsManager();
       updateTablePreview();
-      populateSalesNumbersDropdown();
-      updateSalesInputs();
+      renderSalesList();
+      updateSalesSummary();
       triggerResize();
     }
 
@@ -1734,8 +1633,8 @@ if (raffleIdStr) {
       renderPrizes();
       renderColumnsManager();
       updateTablePreview();
-      populateSalesNumbersDropdown();
-      updateSalesInputs();
+      renderSalesList();
+      updateSalesSummary();
       triggerResize();
     }
 

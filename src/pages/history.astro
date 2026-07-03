@@ -35,7 +35,7 @@ if (Astro.request.method === 'POST') {
       // Perform draw
       const participants = raffle.participants || [];
       if (participants.length === 0) {
-        throw new Error('No hay participantes registrados para realizar el sorteo');
+        throw new Error('No hay ventas registradas para realizar el sorteo');
       }
 
       const prizes = raffle.prizes || [];
@@ -51,21 +51,25 @@ if (Astro.request.method === 'POST') {
         throw new Error('No hay premios configurados en esta rifa');
       }
 
-      // Select winners randomly
+      // Select winners randomly from 1 to total rows
       const winners = [];
-      const soldTickets = participants.map((p: any) => p.rowNumber);
+      const totalTickets = raffle.rows || 10;
+      const pool = [];
+      for (let i = 1; i <= totalTickets; i++) {
+        pool.push(i);
+      }
 
       allPrizesList.forEach((prizeName, prizeIndex) => {
-        // Pick a random ticket from sold tickets
-        const randomIndex = Math.floor(Math.random() * soldTickets.length);
-        const winningNumber = soldTickets[randomIndex];
-        const participantObj = participants.find((p: any) => p.rowNumber === winningNumber);
+        if (pool.length === 0) return;
+        // Pick a random ticket from the remaining pool
+        const randomIndex = Math.floor(Math.random() * pool.length);
+        const winningNumber = pool.splice(randomIndex, 1)[0];
 
         winners.push({
           prizeIndex: prizeIndex + 1,
           prizeName,
           winningNumber,
-          winnerName: participantObj ? participantObj.data.name : 'Ticket Vendido'
+          winnerName: 'Verificar en hoja'
         });
       });
 
@@ -446,9 +450,9 @@ function parseTicketPrice(priceStr: string) {
     ) : (
       <div class="raffles-grid">
         {raffles.map((raffle) => {
-          const participantsCount = raffle.participants?.length || 0;
+          const soldTicketsCount = raffle.participants?.reduce((sum: number, p: any) => sum + (p.quantity || 0), 0) || 0;
           const ticketPrice = parseTicketPrice(raffle.cost);
-          const moneyRaised = participantsCount * ticketPrice;
+          const moneyRaised = soldTicketsCount * ticketPrice;
           const isCompleted = raffle.status === 'finalizada';
 
           return (
@@ -465,8 +469,8 @@ function parseTicketPrice(priceStr: string) {
 
               <div class="card-body">
                 <div class="info-block">
-                  <span>Números Vendidos</span>
-                  <strong>{participantsCount} / {raffle.rows}</strong>
+                  <span>Boletos Vendidos</span>
+                  <strong>{soldTicketsCount} boletos</strong>
                 </div>
                 <div class="info-block">
                   <span>Dinero Recaudado</span>
@@ -508,7 +512,7 @@ function parseTicketPrice(priceStr: string) {
                   <form method="POST" style="display:inline;" onsubmit="return confirm('¿Seguro que quieres realizar el sorteo? Esto seleccionará ganadores aleatorios entre los números vendidos.');">
                     <input type="hidden" name="action" value="draw">
                     <input type="hidden" name="raffleId" value={raffle._id.toString()}>
-                    <button type="submit" class="btn btn-primary" disabled={participantsCount === 0} title={participantsCount === 0 ? 'Debes vender al menos un número para sortear' : ''}>
+                    <button type="submit" class="btn btn-primary" disabled={soldTicketsCount === 0} title={soldTicketsCount === 0 ? 'Debes vender al menos un número para sortear' : ''}>
                       <svg style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="23 4 23 10 17 10"></polyline>
                         <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
