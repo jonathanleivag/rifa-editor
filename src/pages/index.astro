@@ -786,9 +786,8 @@ if (raffleIdStr) {
         <!-- Dynamic sales registrator -->
         <div class="form-group" style="background: rgba(255, 255, 255, 0.02); border: 1px dashed var(--border-color); border-radius: 8px; padding: 14px; margin-bottom: 15px;">
           <label style="color: #fff; font-size: 11px; margin-bottom: 10px; display: block; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Venta de Números</label>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: -4px; margin-bottom: 12px;">
+          <div style="margin-top: -4px; margin-bottom: 12px;">
             <span id="sales-summary-text" style="font-size: 11px; color: var(--text-gray); font-weight: 500;">Vendidos: 0 de 10</span>
-            <span id="sales-money-text" style="font-size: 11px; color: var(--accent-hover); font-weight: 700;">Recaudado: $0</span>
           </div>
           <div class="form-row" style="margin-bottom: 8px; gap: 8px;">
             <div style="display: flex; flex-direction: column; width: 35%;">
@@ -1248,23 +1247,15 @@ if (raffleIdStr) {
       updateSalesInputs();
     }
 
-    // Update sales summary and money raised counters in sidebar
+    // Update sales summary counter in sidebar
     function updateSalesSummary() {
       const summaryText = document.getElementById('sales-summary-text');
-      const moneyText = document.getElementById('sales-money-text');
-      if (!summaryText || !moneyText) return;
+      if (!summaryText) return;
       
       const totalRows = parseInt(elements.rows.value) || 10;
       const soldCount = currentParticipants.length;
       
       summaryText.textContent = `Vendidos: ${soldCount} de ${totalRows}`;
-      
-      // Calculate money raised
-      const rawCost = elements.cost.value || '$1.000';
-      const ticketCost = parseInt(rawCost.replace(/\D/g, '')) || 0;
-      const moneyRaised = soldCount * ticketCost;
-      
-      moneyText.textContent = `Recaudado: $${moneyRaised.toLocaleString('es-CL')}`;
     }
 
     // Populate select dropdown for sales numbers
