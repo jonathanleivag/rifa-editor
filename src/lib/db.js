@@ -1,6 +1,9 @@
 import { MongoClient } from 'mongodb';
 
-const uri = import.meta.env.MONGODB_URI;
+let uri = import.meta.env.MONGODB_URI;
+if (uri) {
+  uri = uri.trim().replace(/^['"]|['"]$/g, '');
+}
 
 if (!uri) {
   console.warn('ADVERTENCIA: La variable de entorno MONGODB_URI no está definida. Por favor crea un archivo .env en la raíz.');
