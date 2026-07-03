@@ -450,7 +450,7 @@ function parseTicketPrice(priceStr: string) {
     ) : (
       <div class="raffles-grid">
         {raffles.map((raffle) => {
-          const soldTicketsCount = raffle.participants?.reduce((sum: number, p: any) => sum + (p.quantity || 0), 0) || 0;
+          const soldTicketsCount = raffle.participants?.reduce((sum: number, p: any) => sum + (p.isComplete ? (raffle.rows || 10) : (p.quantity || 0)), 0) || 0;
           const ticketPrice = parseTicketPrice(raffle.cost);
           const moneyRaised = soldTicketsCount * ticketPrice;
           const isCompleted = raffle.status === 'finalizada';

@@ -789,12 +789,19 @@ if (raffleIdStr) {
           <div style="margin-top: -4px; margin-bottom: 12px;">
             <span id="sales-summary-text" style="font-size: 11px; color: var(--text-gray); font-weight: 500;">Total Vendidos: 0 boletos</span>
           </div>
+          <div class="form-group" style="margin-bottom: 8px;">
+            <label for="input-seller-name" style="font-size: 9px; margin-bottom: 4px;">Nombre del Vendedor</label>
+            <input type="text" id="input-seller-name" placeholder="Ej: Juan Pérez" style="width: 100%; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; font-family: inherit; font-size: 12px; color: var(--text-light);">
+          </div>
           <div class="form-row" style="margin-bottom: 8px; gap: 8px;">
-            <div style="display: flex; flex-direction: column; width: 65%;">
-              <label for="input-seller-name" style="font-size: 9px; margin-bottom: 4px;">Nombre del Vendedor</label>
-              <input type="text" id="input-seller-name" placeholder="Ej: Juan Pérez" style="width: 100%; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; font-family: inherit; font-size: 12px; color: var(--text-light);">
+            <div style="display: flex; flex-direction: column; width: 60%;">
+              <label for="input-seller-status" style="font-size: 9px; margin-bottom: 4px;">¿Venta Completa?</label>
+              <select id="input-seller-status" style="width: 100%; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; font-family: inherit; font-size: 12px; color: var(--text-light); cursor: pointer;">
+                <option value="complete">Sí (Rifa Completa)</option>
+                <option value="partial">No (Venta Parcial)</option>
+              </select>
             </div>
-            <div style="display: flex; flex-direction: column; width: 35%;">
+            <div id="seller-quantity-container" style="display: none; flex-direction: column; width: 40%;">
               <label for="input-seller-quantity" style="font-size: 9px; margin-bottom: 4px;">Boletos</label>
               <input type="number" id="input-seller-quantity" min="1" value="1" style="width: 100%; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; font-family: inherit; font-size: 12px; color: var(--text-light);">
             </div>
@@ -1126,6 +1133,18 @@ if (raffleIdStr) {
       });
 
       // Sales handlers
+      const sellerStatusSelect = document.getElementById('input-seller-status');
+      const sellerQtyContainer = document.getElementById('seller-quantity-container');
+      if (sellerStatusSelect && sellerQtyContainer) {
+        sellerStatusSelect.addEventListener('change', (e) => {
+          if (e.target.value === 'complete') {
+            sellerQtyContainer.style.display = 'none';
+          } else {
+            sellerQtyContainer.style.display = 'flex';
+          }
+        });
+      }
+
       const btnRegisterSale = document.getElementById('btn-register-sale');
       if (btnRegisterSale) {
         btnRegisterSale.addEventListener('click', registerSale);
@@ -1229,7 +1248,6 @@ if (raffleIdStr) {
       });
       
       renderTableRows();
-      updateSalesInputs();
     }
 
     // Update sales summary counter in sidebar
@@ -1237,7 +1255,8 @@ if (raffleIdStr) {
       const summaryText = document.getElementById('sales-summary-text');
       if (!summaryText) return;
       
-      const soldCount = currentParticipants.reduce((sum, p) => sum + (p.quantity || 0), 0);
+      const totalRows = parseInt(elements.rows.value) || 10;
+      const soldCount = currentParticipants.reduce((sum, p) => sum + (p.isComplete ? totalRows : (p.quantity || 0)), 0);
       summaryText.textContent = `Total Vendidos: ${soldCount} boletos`;
     }
 
@@ -1246,6 +1265,8 @@ if (raffleIdStr) {
       const container = document.getElementById('sales-list-container');
       if (!container) return;
       container.innerHTML = '';
+      
+      const totalRows = parseInt(elements.rows.value) || 10;
       
       currentParticipants.forEach((sale, index) => {
         const div = document.createElement('div');
@@ -1259,7 +1280,8 @@ if (raffleIdStr) {
         div.style.fontSize = '12px';
         
         const info = document.createElement('span');
-        info.innerHTML = `<strong style="color:#fff;">${sale.sellerName}</strong>: ${sale.quantity} boleto(s)`;
+        const qtyText = sale.isComplete ? `Completa (${totalRows})` : `${sale.quantity} boletos`;
+        info.innerHTML = `<strong style="color:#fff;">${sale.sellerName}</strong>: ${qtyText}`;
         
         const btnDelete = document.createElement('button');
         btnDelete.type = 'button';
@@ -1286,27 +1308,31 @@ if (raffleIdStr) {
     // Register sale of raffle tickets
     function registerSale() {
       const nameInput = document.getElementById('input-seller-name');
+      const statusSelect = document.getElementById('input-seller-status');
       const qtyInput = document.getElementById('input-seller-quantity');
-      if (!nameInput || !qtyInput) return;
+      if (!nameInput || !statusSelect || !qtyInput) return;
       
       const sellerName = nameInput.value.trim();
-      const quantity = parseInt(qtyInput.value) || 0;
+      const isComplete = statusSelect.value === 'complete';
+      const quantity = isComplete ? 0 : (parseInt(qtyInput.value) || 0);
       
       if (!sellerName) {
         alert('Por favor ingresa el nombre del vendedor');
         return;
       }
       
-      if (quantity <= 0) {
+      if (!isComplete && quantity <= 0) {
         alert('Por favor ingresa una cantidad válida de boletos vendidos');
         return;
       }
       
-      currentParticipants.push({ sellerName, quantity });
+      currentParticipants.push({ sellerName, isComplete, quantity });
       
       // Clear inputs
       nameInput.value = '';
+      statusSelect.value = 'complete';
       qtyInput.value = '1';
+      document.getElementById('seller-quantity-container').style.display = 'none';
       
       renderSalesList();
       updateSalesSummary();
