@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { getDb } from './db';
 
+
 const JWT_SECRET = import.meta.env.JWT_SECRET || 'fallback_secret_key_12345';
 
 // Parse Cookies from request headers
@@ -44,13 +45,13 @@ export async function getUserFromRequest(request) {
 // Register user
 export async function registerUser(username, password) {
   const db = await getDb();
-  
+
   // Enforce email format
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(username)) {
     throw new Error('Por favor ingresa un correo electrónico válido');
   }
-  
+
   // Check if user already exists
   const existingUser = await db.collection('users').findOne({ username: username.toLowerCase().trim() });
   if (existingUser) {
@@ -75,7 +76,7 @@ export async function registerUser(username, password) {
 // Login user
 export async function loginUser(username, password) {
   const db = await getDb();
-  
+
   // Enforce email format check on login too
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(username)) {
