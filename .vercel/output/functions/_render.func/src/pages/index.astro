@@ -1,0 +1,1731 @@
+---
+import { getUserFromRequest } from '../lib/auth';
+import { getDb } from '../lib/db';
+import { ObjectId } from 'mongodb';
+
+const user = await getUserFromRequest(Astro.request);
+if (!user) {
+  return Astro.redirect('/login');
+}
+
+const db = await getDb();
+let loadedRaffleData = null;
+let loadedRaffleId = '';
+
+const url = new URL(Astro.request.url);
+const raffleIdStr = url.searchParams.get('id');
+if (raffleIdStr) {
+  try {
+    const raffle = await db.collection('raffles').findOne({ _id: new ObjectId(raffleIdStr), userId: user._id });
+    if (raffle) {
+      loadedRaffleData = raffle;
+      loadedRaffleId = raffle._id.toString();
+    }
+  } catch (e) {
+    console.error('Error al cargar rifa:', e);
+  }
+}
+---
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diseñador y Editor de Rifa Solidaria (Astro)</title>
+  <link rel="icon" type="image/jpeg" href="/favicon.jpg">
+  <!-- Google Fonts: Cinzel for headers, Montserrat for clean sans-serif text -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;800&family=Montserrat:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style is:global>
+    /* Design Tokens */
+    :root {
+      --bg-dark: #0f1311;
+      --panel-bg: rgba(22, 28, 25, 0.9);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --accent-color: #7b8e78;
+      --accent-hover: #96aa93;
+      --text-light: #e3e8e5;
+      --text-muted: #9ba8a0;
+      
+      /* Raffle Preview Config (Live updated via CSS Variables) */
+      --theme-color: #4b5d4a; /* Classic Olive Green from original */
+      --text-dark: #2c352b;
+      --line-color: rgba(75, 93, 74, 0.5);
+      --font-scale: 1;
+      --table-spacing: 12px;
+      --prizes-spacing: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-light);
+      min-height: 100vh;
+      display: flex;
+      overflow-x: hidden;
+    }
+
+    /* Layout structure */
+    .app-container {
+      display: flex;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* Left panel: Editor controls */
+    .editor-panel {
+      width: 450px;
+      min-width: 400px;
+      height: 100%;
+      background-color: var(--panel-bg);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      backdrop-filter: blur(16px);
+      box-shadow: 10px 0 30px rgba(0, 0, 0, 0.3);
+      z-index: 10;
+    }
+
+    .editor-header {
+      padding: 24px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .editor-header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #fff;
+    }
+
+    .editor-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    /* Form Fields */
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    input[type="text"],
+    textarea,
+    input[type="number"] {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-family: inherit;
+      font-size: 13px;
+      color: var(--text-light);
+      transition: all 0.2s ease;
+    }
+
+    input[type="text"]:focus,
+    textarea:focus,
+    input[type="number"]:focus {
+      outline: none;
+      border-color: var(--accent-color);
+      background: rgba(255, 255, 255, 0.07);
+      box-shadow: 0 0 0 3px rgba(123, 142, 120, 0.25);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 70px;
+    }
+
+    /* Prize list manager */
+    .prizes-manager {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px dashed var(--border-color);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .prize-item-input {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+      align-items: center;
+    }
+
+    .prize-item-input input {
+      flex: 1;
+    }
+
+    .prize-num {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent-color);
+      width: 24px;
+      text-align: center;
+    }
+
+    .btn-delete-prize {
+      background: transparent;
+      border: none;
+      color: #ff6b6b;
+      cursor: pointer;
+      padding: 8px;
+      border-radius: 4px;
+      transition: background 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-delete-prize:hover {
+      background: rgba(255, 107, 107, 0.1);
+    }
+
+    .btn-add-prize {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: var(--text-light);
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .btn-add-prize:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--accent-color);
+    }
+
+    /* Style adjustments sliders */
+    .slider-group {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 24px;
+    }
+
+    .slider-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .slider-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .slider-row label {
+      margin-bottom: 0;
+    }
+
+    input[type="range"] {
+      width: 120px;
+      accent-color: var(--accent-color);
+      cursor: pointer;
+    }
+
+    input[type="color"] {
+      border: none;
+      width: 40px;
+      height: 25px;
+      border-radius: 4px;
+      cursor: pointer;
+      background: transparent;
+    }
+
+    /* Action buttons in footer of sidebar */
+    .editor-footer {
+      padding: 24px;
+      border-top: 1px solid var(--border-color);
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-primary {
+      width: 100%;
+      background: var(--accent-color);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 14px 20px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 15px rgba(123, 142, 120, 0.3);
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary:active {
+      transform: translateY(1px);
+    }
+
+    .btn-secondary-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: var(--text-light);
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--text-muted);
+    }
+
+    /* Right panel: Live Preview Container */
+    .preview-container {
+      flex: 1;
+      height: 100%;
+      overflow: auto;
+      background-color: #2b302c;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      position: relative;
+    }
+
+    /* The outer wrapper scales the A4 sheet to fit the preview container */
+    .sheet-wrapper {
+      transition: all 0.2s ease;
+      position: relative;
+      width: 794px;
+      height: 1123px;
+    }
+
+    /* The actual A4 Sheet format (at 96 DPI: 210mm x 297mm is ~794px x 1123px) */
+    .a4-sheet {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      width: 794px;
+      height: 1123px;
+      min-width: 794px;
+      min-height: 1123px;
+      flex-shrink: 0;
+      background-color: #faf7f2;
+      background-image: url('/raffle_bg_1.jpg');
+      background-size: cover;
+      background-position: center;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 60px 70px 50px 70px;
+      box-sizing: border-box;
+      overflow: hidden;
+      color: var(--text-dark);
+      transform-origin: top center;
+    }
+
+    /* Lightening overlay for background image to enhance contrast */
+    .a4-sheet::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(250, 247, 242, 0.45); /* 45% cream opacity */
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* Raffle contents styling */
+    .sheet-header,
+    .prizes-section,
+    .table-section,
+    .sheet-footer {
+      position: relative;
+      z-index: 2;
+    }
+
+    .sheet-header {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr;
+      gap: 25px;
+      align-items: start;
+    }
+
+    .header-left {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .ticket-no {
+      font-size: calc(14px * var(--font-scale));
+      font-weight: 700;
+      color: var(--theme-color);
+      letter-spacing: 2px;
+      margin-bottom: calc(18px * var(--font-scale));
+    }
+
+    .ticket-no span {
+      border-bottom: 2px solid var(--theme-color);
+      padding-bottom: 2px;
+      display: inline-block;
+      min-width: 80px;
+    }
+
+    .raffle-title-box h2 {
+      font-family: 'Cinzel', serif;
+      font-size: calc(64px * var(--font-scale));
+      font-weight: 800;
+      color: var(--theme-color);
+      line-height: 0.9;
+      margin: 0;
+      letter-spacing: 1px;
+      text-shadow: 0 0 6px #faf7f2, 0 0 2px #faf7f2;
+    }
+
+    .raffle-title-box h3 {
+      font-family: 'Cinzel', serif;
+      font-size: calc(23px * var(--font-scale));
+      font-weight: 700;
+      color: var(--theme-color);
+      line-height: 1.1;
+      margin: 0 0 calc(20px * var(--font-scale)) 0;
+      letter-spacing: 6.5px;
+      text-shadow: 0 0 6px #faf7f2, 0 0 2px #faf7f2;
+    }
+
+    .cost-badge {
+      font-size: calc(14px * var(--font-scale));
+      font-weight: 500;
+      color: var(--text-dark);
+      text-shadow: 0 0 4px #faf7f2;
+    }
+
+    .cost-badge strong {
+      font-size: calc(19px * var(--font-scale));
+      font-weight: 700;
+      color: var(--theme-color);
+    }
+
+    .header-right {
+      height: 100%;
+      border-left: 2px solid var(--theme-color);
+      padding-left: 20px;
+      display: flex;
+      align-items: center;
+    }
+
+    .beneficiary-text {
+      font-size: calc(11px * var(--font-scale));
+      line-height: 1.6;
+      color: var(--text-dark);
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      text-align: justify;
+    }
+
+    /* Prizes Section */
+    .prizes-section {
+      margin-top: calc(15px * var(--font-scale));
+      margin-bottom: calc(10px * var(--font-scale));
+    }
+
+    .prizes-section h4 {
+      font-size: calc(13px * var(--font-scale));
+      font-weight: 800;
+      text-transform: uppercase;
+      color: var(--theme-color);
+      letter-spacing: 2px;
+      margin-bottom: calc(8px * var(--font-scale));
+      border-bottom: 1.5px solid var(--theme-color);
+      padding-bottom: 2px;
+      display: inline-block;
+    }
+
+    .prizes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: var(--prizes-spacing) 25px;
+      list-style-type: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .prizes-grid li {
+      font-size: calc(11.5px * var(--font-scale));
+      font-weight: 600;
+      color: var(--text-dark);
+      text-transform: uppercase;
+      display: flex;
+      align-items: baseline;
+      letter-spacing: 0.2px;
+      text-shadow: 0 0 4px #faf7f2, 0 0 1px #faf7f2;
+    }
+
+    .prizes-grid li span.num {
+      color: var(--theme-color);
+      font-weight: 800;
+      margin-right: 6px;
+      font-size: calc(12px * var(--font-scale));
+    }
+
+    .surprise-prize-preview {
+      margin-top: calc(10px * var(--font-scale));
+      padding-top: calc(8px * var(--font-scale));
+      border-top: 1px dashed var(--line-color);
+      font-size: calc(12px * var(--font-scale));
+      font-weight: 800;
+      color: var(--theme-color);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      text-shadow: 0 0 4px #faf7f2, 0 0 1px #faf7f2;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Table Section */
+    .table-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      margin: calc(10px * var(--font-scale)) 0;
+    }
+
+    .participants-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .participants-table th {
+      font-size: calc(11px * var(--font-scale));
+      font-weight: 800;
+      color: var(--theme-color);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--theme-color);
+    }
+
+    .th-no { text-align: left; width: 8%; }
+    .th-name { text-align: left; width: 62%; }
+    .th-phone { text-align: left; width: 30%; }
+
+    .participants-table td {
+      padding: var(--table-spacing) 0;
+      font-size: calc(13px * var(--font-scale));
+      font-weight: 600;
+      color: var(--text-dark);
+      vertical-align: bottom;
+    }
+
+    .td-no {
+      font-weight: 700;
+    }
+
+    .dotted-line {
+      border-bottom: 1.5px dotted var(--line-color);
+      height: calc(13px * var(--font-scale));
+      margin-right: 15px;
+    }
+
+    .td-phone .dotted-line {
+      margin-right: 0;
+    }
+
+    /* Footer Section */
+    .sheet-footer {
+      text-align: center;
+      border-top: 1px solid rgba(75, 93, 74, 0.15);
+      padding-top: calc(15px * var(--font-scale));
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .draw-date {
+      font-size: calc(14px * var(--font-scale));
+      font-weight: 800;
+      color: var(--theme-color);
+      letter-spacing: 1px;
+    }
+
+    .footer-slogan {
+      font-size: calc(10px * var(--font-scale));
+      font-weight: 600;
+      color: rgba(44, 53, 43, 0.7);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+    }
+
+    /* SVG Icon Helpers */
+    .icon {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+    }
+
+    /* Print styling rules */
+    @media print {
+      body {
+        background-color: #fff !important;
+        color: #000 !important;
+      }
+      .editor-panel {
+        display: none !important;
+      }
+      .preview-container {
+        display: block !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: transparent !important;
+        width: 210mm !important;
+        height: 297mm !important;
+        overflow: visible !important;
+      }
+      .sheet-wrapper {
+        transform: none !important;
+        height: 297mm !important;
+        width: 210mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: block !important;
+      }
+      .a4-sheet {
+        box-shadow: none !important;
+        border: none !important;
+        width: 210mm !important;
+        height: 297mm !important;
+        margin: 0 !important;
+        padding: 20mm 15mm 15mm 15mm !important; /* Ideal margins for printing */
+        page-break-after: avoid;
+        page-break-before: avoid;
+        /* Force printing backgrounds */
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    <!-- Left Sidebar: Controls -->
+    <aside class="editor-panel">
+      <!-- User profile header -->
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <span style="font-size: 9px; font-weight: bold; text-transform: uppercase; color: var(--text-gray);">Usuario Activo</span>
+          <span style="font-size: 13px; font-weight: 700; color: #fff;">{user.username}</span>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <a href="/history" style="text-decoration: none; border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 10px; font-size: 11px; font-weight: 600; color: var(--text-light); background: rgba(255,255,255,0.04); cursor: pointer; transition: all 0.2s;">Historial</a>
+          <a href="/logout" style="text-decoration: none; border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 6px; padding: 6px 10px; font-size: 11px; font-weight: 600; color: #ef4444; background: rgba(239, 68, 68, 0.1); cursor: pointer; transition: all 0.2s;">Salir</a>
+        </div>
+      </div>
+
+      <div class="editor-header">
+        <h1>Modificar Rifa</h1>
+        <svg class="icon" style="color: var(--accent-color)" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      </div>
+      
+      <div class="editor-scroll">
+        <!-- Text details -->
+        <div class="form-group">
+          <label for="input-beneficiary">Nombre del Beneficiario</label>
+          <input type="text" id="input-beneficiary" value="MIGUEL RAÚL GÓMEZ">
+        </div>
+
+        <div class="form-group">
+          <label for="input-description">Descripción / Propósito</label>
+          <textarea id="input-description">RIFA SOLIDARIA A BENEFICIO DE MIGUEL RAÚL GÓMEZ. CADA NÚMERO ES UNA OPORTUNIDAD PARA AYUDAR Y MARCAR LA DIFERENCIA.</textarea>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="input-cost">Costo del Número</label>
+            <input type="text" id="input-cost" value="$1.000">
+          </div>
+          <div class="form-group">
+            <label for="input-no">Etiqueta Número</label>
+            <input type="text" id="input-no" value="NO ______">
+          </div>
+        </div>
+        <!-- Dynamic prizes list -->
+        <div class="form-group">
+          <label>Premios</label>
+          <div class="prizes-manager" id="prizes-inputs-container">
+            <!-- Populated dynamically via JS -->
+          </div>
+          <div class="form-row" style="margin-top: 10px;">
+            <button type="button" class="btn-add-prize" id="btn-add-prize" style="margin-top: 0;">
+              <svg class="icon" style="width: 14px; height: 14px;" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              Agregar Premio
+            </button>
+            <button type="button" class="btn-add-prize" id="btn-shuffle-prizes" style="margin-top: 0;">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+              Desordenar
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <input type="checkbox" id="input-has-surprise" checked style="width: auto; cursor: pointer; margin: 0;">
+            <label for="input-has-surprise" style="margin: 0; cursor: pointer; font-size: 13px; font-weight: 600;">Incluir Premio Sorpresa</label>
+          </div>
+          <input type="text" id="input-surprise-prize" value="UN PREMIO SORPRESA" placeholder="Escribe el premio sorpresa...">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="input-date">Fecha Sorteo</label>
+            <input type="text" id="input-date" value="“EL SORTEO SE REALIZARÁ EL DÍA 23 MAYO”">
+          </div>
+          <div class="form-group">
+            <label for="input-rows">Filas de Tabla</label>
+            <input type="number" id="input-rows" min="1" max="15" value="10">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="input-slogan">Eslogan de Pie</label>
+          <input type="text" id="input-slogan" value="TU APOYO CUENTA MÁS DE LO QUE IMAGINAS.">
+        </div>
+
+        <div class="form-group">
+          <label>Columnas de la Tabla</label>
+          <div class="prizes-manager" id="columns-inputs-container" style="background: rgba(255, 255, 255, 0.02); border: 1px dashed var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 10px;">
+            <!-- Populated dynamically via JS -->
+          </div>
+          <button type="button" class="btn-add-prize" id="btn-add-column" style="margin-top: 0;">
+            <svg class="icon" style="width: 14px; height: 14px;" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            Agregar Columna
+          </button>
+        </div>
+
+        <!-- Dynamic sales registrator -->
+        <div class="form-group" style="background: rgba(255, 255, 255, 0.02); border: 1px dashed var(--border-color); border-radius: 8px; padding: 14px; margin-bottom: 15px;">
+          <label style="color: #fff; font-size: 11px; margin-bottom: 10px; display: block; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Venta de Números</label>
+          <div class="form-row" style="margin-bottom: 8px; gap: 8px;">
+            <div style="display: flex; flex-direction: column; width: 35%;">
+              <label for="input-sale-number" style="font-size: 9px; margin-bottom: 4px;">Número</label>
+              <select id="input-sale-number" style="width: 100%; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; font-family: inherit; font-size: 12px; color: var(--text-light); cursor: pointer;">
+                <!-- Populated dynamically via JS -->
+              </select>
+            </div>
+            <div style="display: flex; flex-direction: column; width: 65%;">
+              <label for="input-sale-name" style="font-size: 9px; margin-bottom: 4px;">Nombre Comprador</label>
+              <input type="text" id="input-sale-name" placeholder="Ej: Juan Pérez" style="width: 100%; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; font-family: inherit; font-size: 12px; color: var(--text-light);">
+            </div>
+          </div>
+          <div class="form-group" id="dynamic-sale-fields" style="margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;">
+            <!-- Rendered dynamically -->
+          </div>
+          <div class="form-row" style="margin-top: 6px; gap: 8px;">
+            <button type="button" class="btn-add-prize" id="btn-register-sale" style="margin-top: 0; background: var(--accent-color); color: #fff; font-size: 11px; padding: 8px 10px;">
+              Registrar Venta
+            </button>
+            <button type="button" class="btn-add-prize" id="btn-clear-sale" style="margin-top: 0; background: rgba(239, 68, 68, 0.1); color: var(--red); border-color: rgba(239, 68, 68, 0.2); font-size: 11px; padding: 8px 10px;">
+              Liberar Número
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="input-background">Fondo Estético</label>
+          <select id="input-background" style="width: 100%; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px 12px; font-family: inherit; font-size: 13px; color: var(--text-light); cursor: pointer;">
+            <option value="/raffle_bg_1.jpg">1. Botánico y Terracota (Original)</option>
+            <option value="/raffle_bg_2.jpg">2. Esmeralda y Oro Lujoso</option>
+            <option value="/raffle_bg_3.jpg">3. Lavanda y Flores Silvestres</option>
+            <option value="/raffle_bg_4.jpg">4. Geométrico Terracota Moderno</option>
+            <option value="/raffle_bg_5.jpg">5. Slate Azul y Plata Elegante</option>
+          </select>
+        </div>
+
+        <!-- Custom sliders for design fine tuning -->
+        <div class="slider-group">
+          <label style="color: #fff; border-bottom: 1px solid var(--border-color); padding-bottom: 6px; margin-bottom: 12px; display: block;">Ajustes de Diseño</label>
+          
+          <div class="slider-row">
+            <label>Color Principal</label>
+            <input type="color" id="input-color-theme" value="#4b5d4a">
+          </div>
+
+          <div class="slider-row">
+            <label>Escala de Fuentes</label>
+            <input type="range" id="input-scale" min="0.8" max="1.2" step="0.05" value="1">
+          </div>
+
+          <div class="slider-row">
+            <label>Espacio Tabla</label>
+            <input type="range" id="input-spacing-table" min="6" max="22" step="1" value="12">
+          </div>
+
+          <div class="slider-row">
+            <label>Espacio Premios</label>
+            <input type="range" id="input-spacing-prizes" min="4" max="16" step="1" value="8">
+          </div>
+        </div>
+      </div>
+      
+      <div class="editor-footer">
+        <div class="form-row" style="margin-bottom: 8px; gap: 8px;">
+          <button type="button" class="btn-primary" id="btn-save-raffle" style="background: var(--accent-color); margin-top: 0; box-shadow: 0 4px 12px rgba(123, 142, 120, 0.2); font-size: 11px; padding: 10px 12px;">
+            <svg class="icon" style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+            Guardar Rifa
+          </button>
+          <button type="button" class="btn-primary" id="btn-print" style="margin-top: 0; font-size: 11px; padding: 10px 12px;">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Imprimir PDF
+          </button>
+        </div>
+        <div class="btn-secondary-row">
+          <button type="button" class="btn-secondary" id="btn-reset">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            Original
+          </button>
+          <button type="button" class="btn-secondary" id="btn-demo-prizes">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            Premios Demo
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Inject server-rendered variables dynamically for JS state -->
+    <script is:inline define:vars={{ loadedRaffleData, loadedRaffleId }}>
+      window.SERVER_DATA = {
+        loadedRaffleData,
+        loadedRaffleId
+      };
+    </script>
+
+    <!-- Right Main Area: Print Preview -->
+    <main class="preview-container">
+      <div class="sheet-wrapper">
+        <div class="a4-sheet" id="raffle-sheet">
+          
+          <!-- Top section -->
+          <div class="sheet-header">
+            <div class="header-left">
+              <div class="ticket-no" id="preview-no-box"><span></span></div>
+              <div class="raffle-title-box">
+                <h2>RIFA</h2>
+                <h3>SOLIDARIA</h3>
+              </div>
+              <div class="cost-badge" id="preview-cost-box">Costo de cada número: <strong>$1.000</strong></div>
+            </div>
+            
+            <div class="header-right">
+              <div class="beneficiary-text" id="preview-description-box">
+                RIFA SOLIDARIA A BENEFICIO DE MIGUEL RAÚL GÓMEZ. CADA NÚMERO ES UNA OPORTUNIDAD PARA AYUDAR Y MARCAR LA DIFERENCIA.
+              </div>
+            </div>
+          </div>
+          
+          <!-- Middle section (Prizes) -->
+          <div class="prizes-section">
+            <h4>Premios:</h4>
+            <ul class="prizes-grid" id="preview-prizes-grid">
+              <!-- Populated dynamically via JS -->
+            </ul>
+            <div id="preview-surprise-container">
+              <!-- Populated dynamically via JS -->
+            </div>
+          </div>
+          
+          <!-- Table section (Participants) -->
+          <div class="table-section">
+            <table class="participants-table">
+              <thead>
+                <tr>
+                  <th class="th-no">NO.</th>
+                  <th class="th-name">NOMBRE DE LA PERSONA</th>
+                  <th class="th-phone">TELÉFONO</th>
+                </tr>
+              </thead>
+              <tbody id="preview-table-body">
+                <!-- Populated dynamically via JS -->
+              </tbody>
+            </table>
+          </div>
+          
+          <!-- Bottom section (Footer) -->
+          <div class="sheet-footer">
+            <div class="draw-date" id="preview-date-box">“EL SORTEO SE REALIZARÁ EL DÍA 23 MAYO”</div>
+            <div class="footer-slogan" id="preview-slogan-box">TU APOYO CUENTA MÁS DE LO QUE IMAGINAS.</div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // Original Baseline Data
+    const ORIGINAL_DATA = {
+      beneficiary: "MIGUEL RAÚL GÓMEZ",
+      description: "RIFA SOLIDARIA A BENEFICIO DE MIGUEL RAÚL GÓMEZ. CADA NÚMERO ES UNA OPORTUNIDAD PARA AYUDAR Y MARCAR LA DIFERENCIA.",
+      cost: "$1.000",
+      no: "NO ______",
+      date: "“EL SORTEO SE REALIZARÁ EL DÍA 23 MAYO”",
+      slogan: "TU APOYO CUENTA MÁS DE LO QUE IMAGINAS.",
+      rows: 10,
+      color: "#4b5d4a",
+      scale: 1,
+      tableSpacing: 12,
+      prizesSpacing: 8,
+      columns: ["NOMBRE DE LA PERSONA", "TELÉFONO"],
+      surprisePrize: "UN PREMIO SORPRESA",
+      prizes: [
+        "UNA PARRILLA ELECTRICA",
+        "DOS BOTELLAS DE VINO",
+        "UN CALEFACTOR",
+        "UN HERVIDOR ELECTRICO",
+        "UN PACK 4 MINI VINOS",
+        "UN JUEGO DE VASOS",
+        "UN CHALECO DE MUJER",
+        "UN PORTA HIELO"
+      ]
+    };
+
+    // Alternate prizes demo to show how it looks with other options
+    const DEMO_PRIZES = [
+      "UNA CANASTA DE ALIMENTOS PREMIUM",
+      "UN HORNO MICROONDAS",
+      "UN JUEGO DE SÁBANAS 2 PLAZAS",
+      "UNA LICUADORA ULTRA",
+      "SET DE ASADO (CUCHILLO Y TABLA)",
+      "UN PARLANTE BLUETOOTH WATERPROOF",
+      "UNA CAFETERA ELÉCTRICA",
+      "UNA GIFT CARD DE $20.000"
+    ];
+
+    const serverData = window.SERVER_DATA || {};
+    const loadedData = serverData.loadedRaffleData;
+    const loadedId = serverData.loadedRaffleId;
+
+    let raffleId = loadedId || '';
+    let currentPrizes = [...ORIGINAL_DATA.prizes];
+    let currentColumns = [...ORIGINAL_DATA.columns];
+    let currentParticipants = [];
+
+    // Selectors
+    const elements = {
+      beneficiary: document.getElementById('input-beneficiary'),
+      description: document.getElementById('input-description'),
+      cost: document.getElementById('input-cost'),
+      no: document.getElementById('input-no'),
+      date: document.getElementById('input-date'),
+      rows: document.getElementById('input-rows'),
+      slogan: document.getElementById('input-slogan'),
+      background: document.getElementById('input-background'),
+      surprisePrizeInput: document.getElementById('input-surprise-prize'),
+      hasSurprise: document.getElementById('input-has-surprise'),
+      columnsInputs: document.getElementById('columns-inputs-container'),
+      btnAddColumn: document.getElementById('btn-add-column'),
+      
+      // Styling controls
+      colorTheme: document.getElementById('input-color-theme'),
+      scale: document.getElementById('input-scale'),
+      spacingTable: document.getElementById('input-spacing-table'),
+      spacingPrizes: document.getElementById('input-spacing-prizes'),
+      
+      // Containers
+      prizesInputs: document.getElementById('prizes-inputs-container'),
+      btnAddPrize: document.getElementById('btn-add-prize'),
+      btnShufflePrizes: document.getElementById('btn-shuffle-prizes'),
+      btnSaveRaffle: document.getElementById('btn-save-raffle'),
+      btnPrint: document.getElementById('btn-print'),
+      btnReset: document.getElementById('btn-reset'),
+      btnDemoPrizes: document.getElementById('btn-demo-prizes'),
+      
+      // Previews
+      previewNo: document.querySelector('#preview-no-box span'),
+      previewDescription: document.getElementById('preview-description-box'),
+      previewCost: document.querySelector('#preview-cost-box strong'),
+      previewPrizesGrid: document.getElementById('preview-prizes-grid'),
+      previewSurpriseContainer: document.getElementById('preview-surprise-container'),
+      previewTableBody: document.getElementById('preview-table-body'),
+      previewDate: document.getElementById('preview-date-box'),
+      previewSlogan: document.getElementById('preview-slogan-box'),
+      
+      sheet: document.getElementById('raffle-sheet'),
+      container: document.querySelector('.preview-container'),
+      wrapper: document.querySelector('.sheet-wrapper')
+    };
+
+    // Initialize
+    function init() {
+      // Load event listeners for basic inputs
+      const basicBindings = [
+        { input: elements.beneficiary, action: updateDescriptionText },
+        { input: elements.description, preview: elements.previewDescription },
+        { input: elements.cost, preview: elements.previewCost },
+        { input: elements.no, preview: elements.previewNo },
+        { input: elements.date, preview: elements.previewDate },
+        { input: elements.slogan, preview: elements.previewSlogan }
+      ];
+
+      basicBindings.forEach(binding => {
+        binding.input.addEventListener('input', (e) => {
+          if (binding.preview) {
+            binding.preview.textContent = e.target.value;
+          }
+          if (binding.action) {
+            binding.action();
+          }
+        });
+      });
+
+      // Special Inputs
+      elements.rows.addEventListener('input', () => {
+        renderTableRows();
+        populateSalesNumbersDropdown();
+        updateSalesInputs();
+      });
+      
+      // Styling controls
+      elements.colorTheme.addEventListener('input', (e) => {
+        document.documentElement.style.setProperty('--theme-color', e.target.value);
+        // Make the line color match the theme but semi-transparent
+        document.documentElement.style.setProperty('--line-color', hexToRgba(e.target.value, 0.5));
+      });
+
+      elements.scale.addEventListener('input', (e) => {
+        document.documentElement.style.setProperty('--font-scale', e.target.value);
+        triggerResize();
+      });
+
+      elements.spacingTable.addEventListener('input', (e) => {
+        document.documentElement.style.setProperty('--table-spacing', `${e.target.value}px`);
+      });
+
+      elements.spacingPrizes.addEventListener('input', (e) => {
+        document.documentElement.style.setProperty('--prizes-spacing', `${e.target.value}px`);
+      });
+
+      // Background selector and auto-theme color mapping
+      const BACKGROUND_THEMES = {
+        '/raffle_bg_1.jpg': '#4b5d4a',
+        '/raffle_bg_2.jpg': '#2c5a45',
+        '/raffle_bg_3.jpg': '#5a4d75',
+        '/raffle_bg_4.jpg': '#a45a3c',
+        '/raffle_bg_5.jpg': '#2b4c6f'
+      };
+
+      elements.background.addEventListener('change', (e) => {
+        const bgUrl = e.target.value;
+        elements.sheet.style.backgroundImage = `url('${bgUrl}')`;
+        
+        // Auto-match color theme
+        const targetColor = BACKGROUND_THEMES[bgUrl];
+        if (targetColor) {
+          elements.colorTheme.value = targetColor;
+          document.documentElement.style.setProperty('--theme-color', targetColor);
+          document.documentElement.style.setProperty('--line-color', hexToRgba(targetColor, 0.5));
+        }
+      });
+
+      elements.btnAddPrize.addEventListener('click', addPrizeField);
+      elements.btnShufflePrizes.addEventListener('click', shufflePrizes);
+      elements.btnAddColumn.addEventListener('click', addColumnField);
+      elements.surprisePrizeInput.addEventListener('input', updatePrizesPreview);
+      elements.hasSurprise.addEventListener('change', (e) => {
+        elements.surprisePrizeInput.disabled = !e.target.checked;
+        updatePrizesPreview();
+      });
+      elements.btnSaveRaffle.addEventListener('click', saveRaffle);
+      elements.btnPrint.addEventListener('click', () => window.print());
+      elements.btnReset.addEventListener('click', () => resetToOriginal(ORIGINAL_DATA));
+      elements.btnDemoPrizes.addEventListener('click', () => {
+        currentPrizes = [...DEMO_PRIZES];
+        elements.surprisePrizeInput.value = "SORPRESA SECRETA DE LA CASA";
+        renderPrizes();
+      });
+
+      // Sales handlers
+      const salesNumberDropdown = document.getElementById('input-sale-number');
+      if (salesNumberDropdown) {
+        salesNumberDropdown.addEventListener('change', updateSalesInputs);
+      }
+      
+      const btnRegisterSale = document.getElementById('btn-register-sale');
+      if (btnRegisterSale) {
+        btnRegisterSale.addEventListener('click', registerSale);
+      }
+      
+      const btnClearSale = document.getElementById('btn-clear-sale');
+      if (btnClearSale) {
+        btnClearSale.addEventListener('click', clearSale);
+      }
+
+      // Set initial values (load if came from db, otherwise use original)
+      if (loadedData) {
+        loadRaffleData(loadedData);
+      } else {
+        resetToOriginal(ORIGINAL_DATA);
+      }
+      
+      // Auto-scaling of sheet to fit window
+      window.addEventListener('resize', triggerResize);
+      setTimeout(triggerResize, 100);
+    }
+
+    // Helper for Hex to RGBA
+    function hexToRgba(hex, alpha) {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    // Dynamic description updater based on beneficiary name
+    function updateDescriptionText() {
+      const name = elements.beneficiary.value.toUpperCase();
+      const newDesc = `RIFA SOLIDARIA A BENEFICIO DE ${name}. CADA NÚMERO ES UNA OPORTUNIDAD PARA AYUDAR Y MARCAR LA DIFERENCIA.`;
+      elements.description.value = newDesc;
+      elements.previewDescription.textContent = newDesc;
+    }
+
+    // Render the Columns Manager Inputs in Sidebar
+    function renderColumnsManager() {
+      elements.columnsInputs.innerHTML = '';
+      currentColumns.forEach((colName, index) => {
+        const item = document.createElement('div');
+        item.className = 'prize-item-input';
+        
+        const num = document.createElement('span');
+        num.className = 'prize-num';
+        num.textContent = `Col ${index + 1}:`;
+        num.style.fontSize = '10px';
+        num.style.width = '42px';
+        
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = colName;
+        input.placeholder = `Nombre Columna ${index + 1}`;
+        input.addEventListener('input', (e) => {
+          currentColumns[index] = e.target.value;
+          updateTablePreview();
+        });
+        
+        const btnDelete = document.createElement('button');
+        btnDelete.type = 'button';
+        btnDelete.className = 'btn-delete-prize';
+        btnDelete.innerHTML = '<svg class="icon" style="width:14px;height:14px" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+        btnDelete.addEventListener('click', () => {
+          currentColumns.splice(index, 1);
+          renderColumnsManager();
+          updateTablePreview();
+        });
+        
+        item.appendChild(num);
+        item.appendChild(input);
+        item.appendChild(btnDelete);
+        elements.columnsInputs.appendChild(item);
+      });
+    }
+
+    // Add empty column field
+    function addColumnField() {
+      currentColumns.push('DIRECCIÓN');
+      renderColumnsManager();
+      updateTablePreview();
+    }
+
+    // Update table headers and columns configuration
+    function updateTablePreview() {
+      const thead = elements.sheet.querySelector('.participants-table thead tr');
+      if (!thead) return;
+      thead.innerHTML = '';
+      
+      // Always add NO.
+      const thNo = document.createElement('th');
+      thNo.className = 'th-no';
+      thNo.textContent = 'NO.';
+      thNo.style.width = '8%';
+      thead.appendChild(thNo);
+      
+      // Calculate remaining width dynamically
+      const colWidth = currentColumns.length > 0 ? (92 / currentColumns.length) + '%' : '92%';
+      
+      currentColumns.forEach((colName) => {
+        const th = document.createElement('th');
+        th.textContent = colName.toUpperCase();
+        th.style.width = colWidth;
+        thead.appendChild(th);
+      });
+      
+      renderTableRows();
+      updateSalesInputs();
+    }
+
+    // Populate select dropdown for sales numbers
+    function populateSalesNumbersDropdown() {
+      const rowCount = parseInt(elements.rows.value) || 10;
+      const select = document.getElementById('input-sale-number');
+      if (!select) return;
+      
+      const currentSelected = select.value;
+      select.innerHTML = '';
+      
+      for (let i = 1; i <= rowCount; i++) {
+        const option = document.createElement('option');
+        option.value = i;
+        
+        // Show indicator if sold
+        const isSold = currentParticipants.some(p => p.rowNumber === i);
+        option.textContent = isSold ? `#${i} - Vendido` : `#${i} - Disponible`;
+        select.appendChild(option);
+      }
+      
+      if (currentSelected && parseInt(currentSelected) <= rowCount) {
+        select.value = currentSelected;
+      } else {
+        select.value = "1";
+      }
+    }
+
+    // Update sales inputs dynamically based on selected number and currentColumns list
+    function updateSalesInputs() {
+      const select = document.getElementById('input-sale-number');
+      const nameInput = document.getElementById('input-sale-name');
+      const dynamicFields = document.getElementById('dynamic-sale-fields');
+      if (!select || !nameInput || !dynamicFields) return;
+      
+      const num = parseInt(select.value) || 1;
+      const participant = currentParticipants.find(p => p.rowNumber === num);
+      
+      // Clear inputs
+      nameInput.value = '';
+      dynamicFields.innerHTML = '';
+      
+      // Render other columns as inputs (excluding the first column, which is Name)
+      const otherColumns = currentColumns.slice(1);
+      
+      otherColumns.forEach((colName) => {
+        const fieldDiv = document.createElement('div');
+        fieldDiv.style.display = 'flex';
+        fieldDiv.style.flexDirection = 'column';
+        fieldDiv.style.gap = '4px';
+        
+        const label = document.createElement('label');
+        label.style.fontSize = '9px';
+        label.style.color = 'var(--text-gray)';
+        label.textContent = colName;
+        
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'dynamic-sale-input';
+        input.dataset.column = colName;
+        input.placeholder = `Ingresa ${colName.toLowerCase()}...`;
+        input.style.width = '100%';
+        input.style.background = 'rgba(255, 255, 255, 0.04)';
+        input.style.border = '1px solid var(--border-color)';
+        input.style.borderRadius = '6px';
+        input.style.padding = '8px 10px';
+        input.style.fontFamily = 'inherit';
+        input.style.fontSize = '12px';
+        input.style.color = 'var(--text-light)';
+        
+        // Populate if exists
+        if (participant && participant.data) {
+          input.value = participant.data[colName] || '';
+        }
+        
+        fieldDiv.appendChild(label);
+        fieldDiv.appendChild(input);
+        dynamicFields.appendChild(fieldDiv);
+      });
+      
+      // Populate name
+      if (participant && participant.data) {
+        nameInput.value = participant.data[currentColumns[0]] || '';
+      }
+    }
+
+    // Register sale
+    function registerSale() {
+      const select = document.getElementById('input-sale-number');
+      const nameInput = document.getElementById('input-sale-name');
+      if (!select || !nameInput) return;
+      
+      const num = parseInt(select.value) || 1;
+      const name = nameInput.value.trim();
+      if (!name) {
+        alert('Por favor ingresa al menos el nombre del comprador');
+        return;
+      }
+      
+      const data = {};
+      data[currentColumns[0]] = name;
+      
+      // Gather dynamic inputs
+      const dynamicInputs = document.querySelectorAll('.dynamic-sale-input');
+      dynamicInputs.forEach((input) => {
+        const col = input.dataset.column;
+        data[col] = input.value.trim();
+      });
+      
+      // Update in array
+      const existingIndex = currentParticipants.findIndex(p => p.rowNumber === num);
+      if (existingIndex > -1) {
+        currentParticipants[existingIndex].data = data;
+      } else {
+        currentParticipants.push({ rowNumber: num, data });
+      }
+      
+      // Re-render
+      populateSalesNumbersDropdown();
+      renderTableRows();
+      showToast('¡Venta registrada con éxito!');
+    }
+
+    // Release ticket
+    function clearSale() {
+      const select = document.getElementById('input-sale-number');
+      if (!select) return;
+      
+      const num = parseInt(select.value) || 1;
+      currentParticipants = currentParticipants.filter(p => p.rowNumber !== num);
+      
+      // Clear inputs
+      document.getElementById('input-sale-name').value = '';
+      const dynamicInputs = document.querySelectorAll('.dynamic-sale-input');
+      dynamicInputs.forEach(i => i.value = '');
+      
+      // Re-render
+      populateSalesNumbersDropdown();
+      renderTableRows();
+      showToast('¡Número liberado!');
+    }
+
+    // Toast notifications helper
+    function showToast(message) {
+      let toast = document.getElementById('app-toast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'app-toast';
+        toast.style.position = 'fixed';
+        toast.style.bottom = '20px';
+        toast.style.right = '20px';
+        toast.style.background = 'rgba(75, 93, 74, 0.95)';
+        toast.style.border = '1px solid rgba(255,255,255,0.1)';
+        toast.style.color = '#fff';
+        toast.style.padding = '12px 24px';
+        toast.style.borderRadius = '8px';
+        toast.style.fontFamily = 'inherit';
+        toast.style.fontSize = '13px';
+        toast.style.fontWeight = '600';
+        toast.style.boxShadow = '0 8px 32px rgba(0,0,0,0.5)';
+        toast.style.zIndex = '9999';
+        toast.style.transition = 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+        toast.style.transform = 'translateY(100px)';
+        toast.style.opacity = '0';
+        document.body.appendChild(toast);
+      }
+      
+      toast.textContent = message;
+      toast.style.transform = 'translateY(0)';
+      toast.style.opacity = '1';
+      
+      setTimeout(() => {
+        toast.style.transform = 'translateY(100px)';
+        toast.style.opacity = '0';
+      }, 3000);
+    }
+
+    // Save raffle configuration to database
+    async function saveRaffle() {
+      const btn = document.getElementById('btn-save-raffle');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = 'Guardando...';
+      
+      const payload = {
+        _id: raffleId,
+        beneficiary: elements.beneficiary.value,
+        description: elements.description.value,
+        cost: elements.cost.value,
+        no: elements.no.value,
+        date: elements.date.value,
+        slogan: elements.slogan.value,
+        rows: parseInt(elements.rows.value) || 10,
+        color: elements.colorTheme.value,
+        scale: parseFloat(elements.scale.value) || 1,
+        tableSpacing: parseInt(elements.spacingTable.value) || 12,
+        prizesSpacing: parseInt(elements.spacingPrizes.value) || 8,
+        background: elements.background.value,
+        columns: currentColumns,
+        prizes: currentPrizes,
+        surprisePrize: elements.surprisePrizeInput.value,
+        hasSurprise: elements.hasSurprise.checked,
+        participants: currentParticipants
+      };
+      
+      try {
+        const res = await fetch('/api/raffles/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+          raffleId = data.id;
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.set('id', raffleId);
+          window.history.replaceState({}, '', newUrl);
+          
+          showToast('¡Rifa guardada correctamente!');
+        } else {
+          alert('Error al guardar: ' + (data.error || 'Desconocido'));
+        }
+      } catch (e) {
+        console.error('Error al guardar rifa:', e);
+        alert('Error de red al guardar la rifa');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    }
+
+    // Render Table Rows dynamically based on currentColumns list and currentParticipants
+    function renderTableRows() {
+      const rowCount = parseInt(elements.rows.value) || 10;
+      elements.previewTableBody.innerHTML = '';
+      
+      for (let i = 1; i <= rowCount; i++) {
+        const tr = document.createElement('tr');
+        
+        // NO. cell
+        const tdNo = document.createElement('td');
+        tdNo.className = 'td-no';
+        tdNo.textContent = `${i}.`;
+        tr.appendChild(tdNo);
+        
+        // Find registered participant
+        const participantObj = currentParticipants.find(p => p.rowNumber === i);
+        
+        // Custom columns cells
+        currentColumns.forEach((colName, colIndex) => {
+          const td = document.createElement('td');
+          if (colIndex === currentColumns.length - 1) {
+            td.className = 'td-phone'; // resets padding-right for last cell
+          }
+          
+          if (participantObj && participantObj.data && participantObj.data[colName]) {
+            // Render buyer information
+            const infoSpan = document.createElement('span');
+            infoSpan.textContent = participantObj.data[colName].toUpperCase();
+            infoSpan.style.fontWeight = '700';
+            infoSpan.style.fontSize = 'calc(10.5px * var(--font-scale))';
+            infoSpan.style.color = 'var(--text-dark)';
+            infoSpan.style.textShadow = '0 0 3px #faf7f2';
+            infoSpan.style.letterSpacing = '0.5px';
+            td.appendChild(infoSpan);
+          } else {
+            // Render dotted line
+            const line = document.createElement('div');
+            line.className = 'dotted-line';
+            
+            // Reset right margin on the last column dotted line
+            if (colIndex === currentColumns.length - 1) {
+              line.style.marginRight = '0';
+            }
+            
+            td.appendChild(line);
+          }
+          
+          tr.appendChild(td);
+        });
+        
+        elements.previewTableBody.appendChild(tr);
+      }
+    }
+
+    // Render Prizes (Inputs & Preview)
+    function renderPrizes() {
+      // 1. Render Editor Inputs
+      elements.prizesInputs.innerHTML = '';
+      currentPrizes.forEach((prize, index) => {
+        const item = document.createElement('div');
+        item.className = 'prize-item-input';
+        
+        const num = document.createElement('span');
+        num.className = 'prize-num';
+        num.textContent = `${index + 1}_`;
+        
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = prize;
+        input.placeholder = `Premio ${index + 1}`;
+        input.addEventListener('input', (e) => {
+          currentPrizes[index] = e.target.value;
+          updatePrizesPreview();
+        });
+        
+        const btnDelete = document.createElement('button');
+        btnDelete.type = 'button';
+        btnDelete.className = 'btn-delete-prize';
+        btnDelete.innerHTML = '<svg class="icon" style="width:14px;height:14px" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+        btnDelete.addEventListener('click', () => {
+          currentPrizes.splice(index, 1);
+          renderPrizes();
+        });
+        
+        item.appendChild(num);
+        item.appendChild(input);
+        item.appendChild(btnDelete);
+        elements.prizesInputs.appendChild(item);
+      });
+
+      updatePrizesPreview();
+    }
+
+    // Update only the preview container for prizes (combines regulars and dynamic surprise field)
+    function updatePrizesPreview() {
+      elements.previewPrizesGrid.innerHTML = '';
+      elements.previewSurpriseContainer.innerHTML = '';
+      
+      // 1. Render main prizes
+      currentPrizes.forEach((prize, index) => {
+        const li = document.createElement('li');
+        
+        const spanNum = document.createElement('span');
+        spanNum.className = 'num';
+        spanNum.textContent = `${index + 1}_`;
+        
+        const textNode = document.createTextNode(prize);
+        
+        li.appendChild(spanNum);
+        li.appendChild(textNode);
+        elements.previewPrizesGrid.appendChild(li);
+      });
+      
+      // 2. Render surprise prize in its own separate container if checked and not empty
+      const isChecked = elements.hasSurprise.checked;
+      const surpriseText = elements.surprisePrizeInput.value.trim();
+      if (isChecked && surpriseText) {
+        const div = document.createElement('div');
+        div.className = 'surprise-prize-preview';
+        
+        const iconSpan = document.createElement('span');
+        iconSpan.textContent = '✦';
+        iconSpan.style.color = 'var(--theme-color)';
+        
+        const labelSpan = document.createElement('strong');
+        labelSpan.textContent = 'PREMIO SORPRESA: ';
+        labelSpan.style.marginRight = '4px';
+        
+        const textSpan = document.createElement('span');
+        textSpan.textContent = surpriseText.toUpperCase();
+        textSpan.style.fontWeight = '600';
+        textSpan.style.color = 'var(--text-dark)';
+        
+        div.appendChild(iconSpan);
+        div.appendChild(labelSpan);
+        div.appendChild(textSpan);
+        
+        elements.previewSurpriseContainer.appendChild(div);
+      }
+      
+      triggerResize();
+    }
+
+    // Add empty prize field
+    function addPrizeField() {
+      currentPrizes.push('');
+      renderPrizes();
+    }
+
+    // Shuffles regular prizes. The surprise prize is managed separately and remains at the bottom.
+    function shufflePrizes() {
+      // Fisher-Yates Shuffle
+      for (let i = currentPrizes.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [currentPrizes[i], currentPrizes[j]] = [currentPrizes[j], currentPrizes[i]];
+      }
+      renderPrizes();
+    }
+
+    // Load full raffle configurations
+    function loadRaffleData(data) {
+      elements.beneficiary.value = data.beneficiary;
+      elements.description.value = data.description;
+      elements.cost.value = data.cost;
+      elements.no.value = data.no;
+      elements.date.value = data.date;
+      elements.rows.value = data.rows;
+      elements.slogan.value = data.slogan;
+      elements.background.value = data.background || '/raffle_bg_1.jpg';
+      elements.sheet.style.backgroundImage = `url('${data.background || '/raffle_bg_1.jpg'}')`;
+      
+      elements.colorTheme.value = data.color;
+      elements.scale.value = data.scale;
+      elements.spacingTable.value = data.tableSpacing;
+      elements.spacingPrizes.value = data.prizesSpacing;
+      
+      document.documentElement.style.setProperty('--theme-color', data.color);
+      document.documentElement.style.setProperty('--line-color', hexToRgba(data.color, 0.5));
+      document.documentElement.style.setProperty('--font-scale', data.scale);
+      document.documentElement.style.setProperty('--table-spacing', `${data.tableSpacing}px`);
+      document.documentElement.style.setProperty('--prizes-spacing', `${data.prizesSpacing}px`);
+      
+      elements.previewNo.textContent = data.no;
+      elements.previewDescription.textContent = data.description;
+      elements.previewCost.textContent = data.cost;
+      elements.previewDate.textContent = data.date;
+      elements.previewSlogan.textContent = data.slogan;
+
+      currentPrizes = [...data.prizes];
+      currentColumns = [...data.columns];
+      currentParticipants = [...(data.participants || [])];
+      
+      if (data.hasSurprise && data.surprisePrize) {
+        elements.hasSurprise.checked = true;
+        elements.surprisePrizeInput.disabled = false;
+        elements.surprisePrizeInput.value = data.surprisePrize;
+      } else {
+        elements.hasSurprise.checked = false;
+        elements.surprisePrizeInput.disabled = true;
+        elements.surprisePrizeInput.value = '';
+      }
+
+      renderPrizes();
+      renderColumnsManager();
+      updateTablePreview();
+      populateSalesNumbersDropdown();
+      updateSalesInputs();
+      triggerResize();
+    }
+
+    // Reset fields to target data
+    function resetToOriginal(data) {
+      elements.beneficiary.value = data.beneficiary;
+      elements.description.value = data.description;
+      elements.cost.value = data.cost;
+      elements.no.value = data.no;
+      elements.date.value = data.date;
+      elements.rows.value = data.rows;
+      elements.slogan.value = data.slogan;
+      elements.background.value = '/raffle_bg_1.jpg';
+      elements.sheet.style.backgroundImage = `url('/raffle_bg_1.jpg')`;
+      elements.surprisePrizeInput.value = data.surprisePrize;
+      
+      elements.colorTheme.value = data.color;
+      elements.scale.value = data.scale;
+      elements.spacingTable.value = data.tableSpacing;
+      elements.spacingPrizes.value = data.prizesSpacing;
+      
+      document.documentElement.style.setProperty('--theme-color', data.color);
+      document.documentElement.style.setProperty('--line-color', hexToRgba(data.color, 0.5));
+      document.documentElement.style.setProperty('--font-scale', data.scale);
+      document.documentElement.style.setProperty('--table-spacing', `${data.tableSpacing}px`);
+      document.documentElement.style.setProperty('--prizes-spacing', `${data.prizesSpacing}px`);
+      
+      elements.previewNo.textContent = data.no;
+      elements.previewDescription.textContent = data.description;
+      elements.previewCost.textContent = data.cost;
+      elements.previewDate.textContent = data.date;
+      elements.previewSlogan.textContent = data.slogan;
+
+      currentPrizes = [...data.prizes];
+      currentColumns = [...data.columns];
+      currentParticipants = [];
+      
+      renderPrizes();
+      renderColumnsManager();
+      updateTablePreview();
+      populateSalesNumbersDropdown();
+      updateSalesInputs();
+      triggerResize();
+    }
+
+    // Handles smart resizing of preview sheet within standard layouts
+    function triggerResize() {
+      const containerWidth = elements.container.clientWidth - 48; // padding
+      const containerHeight = elements.container.clientHeight - 48;
+      
+      const sheetWidth = 794;
+      const sheetHeight = 1123;
+      
+      const scaleX = containerWidth / sheetWidth;
+      const scaleY = containerHeight / sheetHeight;
+      const scale = Math.min(scaleX, scaleY, 1); // Max scale 1
+      
+      elements.sheet.style.transform = `translate(-50%, 0) scale(${scale})`;
+      elements.wrapper.style.width = `${sheetWidth * scale}px`;
+      elements.wrapper.style.height = `${sheetHeight * scale}px`;
+    }
+
+    // Initialize on page load
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
