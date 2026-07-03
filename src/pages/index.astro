@@ -786,8 +786,9 @@ if (raffleIdStr) {
         <!-- Dynamic sales registrator -->
         <div class="form-group" style="background: rgba(255, 255, 255, 0.02); border: 1px dashed var(--border-color); border-radius: 8px; padding: 14px; margin-bottom: 15px;">
           <label style="color: #fff; font-size: 11px; margin-bottom: 10px; display: block; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Registro de Ventas</label>
-          <div style="margin-top: -4px; margin-bottom: 12px;">
+          <div style="margin-top: -4px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
             <span id="sales-summary-text" style="font-size: 11px; color: var(--text-gray); font-weight: 500;">Total Vendidos: 0 boletos</span>
+            <span id="sales-delivered-text" style="font-size: 11px; color: var(--text-gray); font-weight: 500;">Entregadas: 0 rifas</span>
           </div>
           <div class="form-group" style="margin-bottom: 8px;">
             <label for="input-seller-name" style="font-size: 9px; margin-bottom: 4px;">Nombre del Vendedor</label>
@@ -1258,6 +1259,7 @@ if (raffleIdStr) {
     // Update sales summary counter in sidebar
     function updateSalesSummary() {
       const summaryText = document.getElementById('sales-summary-text');
+      const deliveredText = document.getElementById('sales-delivered-text');
       if (!summaryText) return;
       
       const totalRows = parseInt(elements.rows.value) || 10;
@@ -1268,6 +1270,10 @@ if (raffleIdStr) {
         return sum; // 'delivered' has 0 sold tickets
       }, 0);
       summaryText.textContent = `Total Vendidos: ${soldCount} boletos`;
+      
+      if (deliveredText) {
+        deliveredText.textContent = `Entregadas: ${currentParticipants.length} rifas`;
+      }
     }
 
     // Render registered sales list

@@ -297,7 +297,7 @@ function parseTicketPrice(priceStr: string) {
 
     .card-body {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(3, 1fr);
       gap: 20px;
       margin-bottom: 24px;
       border-top: 1px solid var(--border-color);
@@ -473,6 +473,10 @@ function parseTicketPrice(priceStr: string) {
               </div>
 
               <div class="card-body">
+                <div class="info-block">
+                  <span>Rifas Entregadas</span>
+                  <strong>{raffle.participants?.length || 0} hojas</strong>
+                </div>
                 <div class="info-block">
                   <span>Boletos Vendidos</span>
                   <strong>{soldTicketsCount} boletos</strong>
