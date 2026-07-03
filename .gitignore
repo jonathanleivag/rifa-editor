@@ -4,6 +4,7 @@ node_modules/
 # Directorios de compilación y caché
 dist/
 .astro/
+.vercel/
 
 # Configuración y secretos locales
 .env
