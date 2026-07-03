@@ -795,18 +795,22 @@ if (raffleIdStr) {
             <input type="text" id="input-seller-name" placeholder="Ej: Juan Pérez" style="width: 100%; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; font-family: inherit; font-size: 12px; color: var(--text-light);">
           </div>
           <div class="form-row" style="margin-bottom: 8px; gap: 8px;">
+            <div style="display: flex; flex-direction: column; width: 40%;">
+              <label for="input-seller-sheets" style="font-size: 9px; margin-bottom: 4px;">Hojas Entregadas</label>
+              <input type="number" id="input-seller-sheets" min="1" value="1" style="width: 100%; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; font-family: inherit; font-size: 12px; color: var(--text-light);">
+            </div>
             <div style="display: flex; flex-direction: column; width: 60%;">
-              <label for="input-seller-status" style="font-size: 9px; margin-bottom: 4px;">Estado de Rifa</label>
+              <label for="input-seller-status" style="font-size: 9px; margin-bottom: 4px;">Estado de Venta</label>
               <select id="input-seller-status" style="width: 100%; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; font-family: inherit; font-size: 12px; color: var(--text-light); cursor: pointer;">
-                <option value="delivered">Entregada (Por vender)</option>
-                <option value="complete">Completa (Vendida entera)</option>
+                <option value="delivered">Entregadas (Por vender)</option>
+                <option value="complete">Completas (Todas vendidas)</option>
                 <option value="partial">Parcial (Venta parcial)</option>
               </select>
             </div>
-            <div id="seller-quantity-container" style="display: none; flex-direction: column; width: 40%;">
-              <label for="input-seller-quantity" style="font-size: 9px; margin-bottom: 4px;">Boletos</label>
-              <input type="number" id="input-seller-quantity" min="1" value="1" style="width: 100%; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; font-family: inherit; font-size: 12px; color: var(--text-light);">
-            </div>
+          </div>
+          <div id="seller-quantity-container" style="display: none; flex-direction: column; margin-bottom: 8px;">
+            <label for="input-seller-quantity" style="font-size: 9px; margin-bottom: 4px;">Total Boletos Vendidos (de todas sus hojas)</label>
+            <input type="number" id="input-seller-quantity" min="1" value="1" style="width: 100%; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; font-family: inherit; font-size: 12px; color: var(--text-light);">
           </div>
           <div class="form-row" style="margin-top: 6px; margin-bottom: 12px;">
             <div id="btn-sales-actions" style="display: flex; gap: 8px; width: 100%;">
@@ -1263,16 +1267,18 @@ if (raffleIdStr) {
       if (!summaryText) return;
       
       const totalRows = parseInt(elements.rows.value) || 10;
+      const deliveredSheetsCount = currentParticipants.reduce((sum, p) => sum + (p.sheets || 1), 0);
       const soldCount = currentParticipants.reduce((sum, p) => {
         const status = p.status || (p.isComplete ? 'complete' : 'partial');
-        if (status === 'complete') return sum + totalRows;
+        const sheets = p.sheets || 1;
+        if (status === 'complete') return sum + (sheets * totalRows);
         if (status === 'partial') return sum + (p.quantity || 0);
         return sum; // 'delivered' has 0 sold tickets
       }, 0);
       summaryText.textContent = `Total Vendidos: ${soldCount} boletos`;
       
       if (deliveredText) {
-        deliveredText.textContent = `Entregadas: ${currentParticipants.length} rifas`;
+        deliveredText.textContent = `Entregadas: ${deliveredSheetsCount} rifas`;
       }
     }
 
@@ -1297,13 +1303,14 @@ if (raffleIdStr) {
         
         const info = document.createElement('span');
         const status = sale.status || (sale.isComplete ? 'complete' : 'partial');
+        const sheets = sale.sheets || 1;
         let qtyText = '';
         if (status === 'complete') {
-          qtyText = `Completa (${totalRows})`;
+          qtyText = `${sheets} completas (${sheets * totalRows} boletos)`;
         } else if (status === 'partial') {
-          qtyText = `Parcial (${sale.quantity})`;
+          qtyText = `${sheets} ent., parcial (${sale.quantity} bol.)`;
         } else {
-          qtyText = 'Entregada (0)';
+          qtyText = `${sheets} ent. (0 boletos)`;
         }
         
         info.innerHTML = `<strong style="color:#fff;">${sale.sellerName}</strong>: ${qtyText}`;
@@ -1363,15 +1370,17 @@ if (raffleIdStr) {
       const status = sale.status || (sale.isComplete ? 'complete' : 'partial');
       
       const nameInput = document.getElementById('input-seller-name');
+      const sheetsInput = document.getElementById('input-seller-sheets');
       const statusSelect = document.getElementById('input-seller-status');
       const qtyInput = document.getElementById('input-seller-quantity');
       const qtyContainer = document.getElementById('seller-quantity-container');
       const btnRegister = document.getElementById('btn-register-sale');
       const actionsContainer = document.getElementById('btn-sales-actions');
       
-      if (!nameInput || !statusSelect || !qtyInput || !qtyContainer || !btnRegister || !actionsContainer) return;
+      if (!nameInput || !sheetsInput || !statusSelect || !qtyInput || !qtyContainer || !btnRegister || !actionsContainer) return;
       
       nameInput.value = sale.sellerName;
+      sheetsInput.value = sale.sheets || '1';
       statusSelect.value = status;
       qtyInput.value = sale.quantity || '1';
       
@@ -1409,6 +1418,7 @@ if (raffleIdStr) {
       editingSaleIndex = null;
       
       const nameInput = document.getElementById('input-seller-name');
+      const sheetsInput = document.getElementById('input-seller-sheets');
       const statusSelect = document.getElementById('input-seller-status');
       const qtyInput = document.getElementById('input-seller-quantity');
       const qtyContainer = document.getElementById('seller-quantity-container');
@@ -1416,6 +1426,7 @@ if (raffleIdStr) {
       const btnCancel = document.getElementById('btn-cancel-edit-sale');
       
       if (nameInput) nameInput.value = '';
+      if (sheetsInput) sheetsInput.value = '1';
       if (statusSelect) statusSelect.value = 'delivered';
       if (qtyInput) qtyInput.value = '1';
       if (qtyContainer) qtyContainer.style.display = 'none';
@@ -1433,11 +1444,13 @@ if (raffleIdStr) {
     // Register or update sale of raffle tickets
     function registerSale() {
       const nameInput = document.getElementById('input-seller-name');
+      const sheetsInput = document.getElementById('input-seller-sheets');
       const statusSelect = document.getElementById('input-seller-status');
       const qtyInput = document.getElementById('input-seller-quantity');
-      if (!nameInput || !statusSelect || !qtyInput) return;
+      if (!nameInput || !sheetsInput || !statusSelect || !qtyInput) return;
       
       const sellerName = nameInput.value.trim();
+      const sheets = parseInt(sheetsInput.value) || 1;
       const status = statusSelect.value;
       const quantity = status === 'partial' ? (parseInt(qtyInput.value) || 0) : 0;
       
@@ -1446,12 +1459,17 @@ if (raffleIdStr) {
         return;
       }
       
+      if (sheets <= 0) {
+        alert('Por favor ingresa una cantidad válida de hojas entregadas');
+        return;
+      }
+      
       if (status === 'partial' && quantity <= 0) {
         alert('Por favor ingresa una cantidad válida de boletos vendidos');
         return;
       }
       
-      const saleData = { sellerName, status, quantity };
+      const saleData = { sellerName, sheets, status, quantity };
       
       if (editingSaleIndex !== null) {
         // Update in-place
@@ -1466,6 +1484,7 @@ if (raffleIdStr) {
       
       // Reset form
       nameInput.value = '';
+      sheetsInput.value = '1';
       statusSelect.value = 'delivered';
       qtyInput.value = '1';
       document.getElementById('seller-quantity-container').style.display = 'none';

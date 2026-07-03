@@ -450,9 +450,11 @@ function parseTicketPrice(priceStr: string) {
     ) : (
       <div class="raffles-grid">
         {raffles.map((raffle) => {
+          const deliveredSheetsCount = raffle.participants?.reduce((sum: number, p: any) => sum + (p.sheets || 1), 0) || 0;
           const soldTicketsCount = raffle.participants?.reduce((sum: number, p: any) => {
             const status = p.status || (p.isComplete ? 'complete' : 'partial');
-            if (status === 'complete') return sum + (raffle.rows || 10);
+            const sheets = p.sheets || 1;
+            if (status === 'complete') return sum + (sheets * (raffle.rows || 10));
             if (status === 'partial') return sum + (p.quantity || 0);
             return sum;
           }, 0) || 0;
@@ -475,7 +477,7 @@ function parseTicketPrice(priceStr: string) {
               <div class="card-body">
                 <div class="info-block">
                   <span>Rifas Entregadas</span>
-                  <strong>{raffle.participants?.length || 0} hojas</strong>
+                  <strong>{deliveredSheetsCount} hojas</strong>
                 </div>
                 <div class="info-block">
                   <span>Boletos Vendidos</span>
